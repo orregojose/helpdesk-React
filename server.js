@@ -26,14 +26,30 @@ app.use((req, res, next) => {
 
 // Conexión a MySQL usando pool
 const pool = mysql.createPool({
-    host: process.env.DB_HOST || "209.133.211.106",
-    user: process.env.DB_USER || "trilogit_admin",
-    password: process.env.DB_PASSWORD || "Admin50p0r73*",
-    database: process.env.DB_DATABASE || "trilogit_helpdesk",
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_DATABASE,
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
+    queueLimit: 0,
+    ssl: process.env.NODE_ENV === 'production' ? {
+        rejectUnauthorized: true
+    } : false
 }).promise();
+
+// Verificar conexión a la base de datos
+const testDatabaseConnection = async () => {
+    try {
+        const connection = await pool.getConnection();
+        console.log('✅ Conexión a la base de datos establecida correctamente');
+        connection.release();
+        return true;
+    } catch (error) {
+        console.error('❌ Error conectando a la base de datos:', error);
+        return false;
+    }
+};
 
 // Servir archivos estáticos en producción
 if (process.env.NODE_ENV === 'production') {
@@ -760,6 +776,31 @@ app.use((req, res) => {
 
 // Iniciar el servidor
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-});
+
+const startServer = async () => {
+    try {
+        // Verificar conexión a la base de datos
+        const isConnected = await testDatabaseConnection();
+        if (!isConnected) {
+            console.error('❌ No se pudo establecer conexión con la base de datos');
+            process.exit(1);
+        }
+
+        // Inicializar la base de datos
+        await initializeDatabase();
+
+        app.listen(PORT, () => {
+            console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
+            console.log('✅ Variables de entorno cargadas:');
+            console.log('   DB_HOST:', process.env.DB_HOST ? '(configurado)' : '(no configurado)');
+            console.log('   DB_USER:', process.env.DB_USER ? '(configurado)' : '(no configurado)');
+            console.log('   DB_DATABASE:', process.env.DB_DATABASE ? '(configurado)' : '(no configurado)');
+            console.log('   NODE_ENV:', process.env.NODE_ENV || 'development');
+        });
+    } catch (error) {
+        console.error('❌ Error al iniciar el servidor:', error);
+        process.exit(1);
+    }
+};
+
+startServer();
